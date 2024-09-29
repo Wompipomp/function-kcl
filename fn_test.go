@@ -14,11 +14,16 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
+	res "github.com/crossplane-contrib/function-kcl/pkg/resource"
 	fnv1 "github.com/crossplane/function-sdk-go/proto/v1"
 	"github.com/crossplane/function-sdk-go/resource"
 	"github.com/crossplane/function-sdk-go/response"
 
 	"kcl-lang.io/krm-kcl/pkg/kube"
+)
+
+var (
+	targetComposite = fnv1.Target_TARGET_COMPOSITE
 )
 
 func TestRunFunctionSimple(t *testing.T) {
@@ -130,7 +135,7 @@ func TestRunFunctionSimple(t *testing.T) {
 					}`),
 					Observed: &fnv1.State{
 						Composite: &fnv1.Resource{
-							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR"}`),
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR", "metadata": { "name": "test" }}`),
 						},
 					},
 				},
@@ -186,6 +191,177 @@ func TestRunFunctionSimple(t *testing.T) {
 							},
 							"custom-composition-resource-name-1": {
 								Resource: resource.MustStructJSON(`{"apiVersion": "example.org/v1", "kind": "Generated", "metadata": {"annotations": {}}}`),
+							},
+						},
+					},
+				},
+			},
+		},
+		"InvalidMetaKind": {
+			reason: "The Function should return a fatal result if the meta kind is invalid.",
+			args: args{
+				req: &fnv1.RunFunctionRequest{
+					Input: resource.MustStructJSON(`{
+						"apiVersion": "krm.kcl.dev/v1alpha1",
+						"kind": "KCLInput",
+						"metadata": {
+							"name": "basic"
+						},
+						"spec": {
+							"source": "items = [\n{\n    apiVersion: \"meta.krm.kcl.dev/v1alpha1\"\n    kind: \"InvalidMeta\"\n}\n]\n"
+						}
+					}`),
+					Observed: &fnv1.State{
+						Composite: &fnv1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`),
+						},
+					},
+					Desired: &fnv1.State{
+						Composite: &fnv1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`),
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &fnv1.RunFunctionResponse{
+					Meta: &fnv1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*fnv1.Result{
+						{
+							Severity: fnv1.Severity_SEVERITY_FATAL,
+							Message:  "cannot process xr and state with the pipeline output in *v1.RunFunctionResponse: invalid kind \"InvalidMeta\" for apiVersion \"" + res.MetaApiVersion + "\" - must be CompositeConnectionDetails or ExtraResources",
+							Target:   &targetComposite,
+						},
+					},
+					Desired: &fnv1.State{
+						Composite: &fnv1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`),
+						},
+					},
+				},
+			},
+		},
+		"ExtraResources": {
+			reason: "The Function should return the desired composite with extra resources.",
+			args: args{
+				req: &fnv1.RunFunctionRequest{
+					Input: resource.MustStructJSON(`{
+						"apiVersion": "krm.kcl.dev/v1alpha1",
+						"kind": "KCLInput",
+						"metadata": {
+							"name": "basic"
+						},
+						"spec": {
+							"source": "items = [\n{\n    apiVersion: \"meta.krm.kcl.dev/v1alpha1\"\n    kind: \"ExtraResources\"\n    requirements = {\n        \"cool-extra-resource\" = {\n            apiVersion: \"example.org/v1\"\n            kind: \"CoolExtraResource\"\n            matchName: \"cool-extra-resource\"\n        }\n    }\n},\n{\n    apiVersion: \"meta.krm.kcl.dev/v1alpha1\"\n    kind: \"ExtraResources\"\n    requirements = {\n        \"another-cool-extra-resource\" = {\n            apiVersion: \"example.org/v1\"\n            kind: \"CoolExtraResource\"\n            matchLabels = {\n                key: \"value\"\n            }\n        },\n        \"yet-another-cool-extra-resource\" = {\n            apiVersion: \"example.org/v1\"\n            kind: \"CoolExtraResource\"\n            matchName: \"foo\"\n        }\n    }\n}\n]\n"
+						}
+					}`),
+					Observed: &fnv1.State{
+						Composite: &fnv1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`),
+						},
+					},
+					Desired: &fnv1.State{
+						Composite: &fnv1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`),
+						},
+						Resources: map[string]*fnv1.Resource{
+							"cool-cd": {
+								Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &fnv1.RunFunctionResponse{
+					Meta:    &fnv1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*fnv1.Result{},
+					Requirements: &fnv1.Requirements{
+						ExtraResources: map[string]*fnv1.ResourceSelector{
+							"cool-extra-resource": {
+								ApiVersion: "example.org/v1",
+								Kind:       "CoolExtraResource",
+								Match: &fnv1.ResourceSelector_MatchName{
+									MatchName: "cool-extra-resource",
+								},
+							},
+							"another-cool-extra-resource": {
+								ApiVersion: "example.org/v1",
+								Kind:       "CoolExtraResource",
+								Match: &fnv1.ResourceSelector_MatchLabels{
+									MatchLabels: &fnv1.MatchLabels{
+										Labels: map[string]string{"key": "value"},
+									},
+								},
+							},
+							"yet-another-cool-extra-resource": {
+								ApiVersion: "example.org/v1",
+								Kind:       "CoolExtraResource",
+								Match: &fnv1.ResourceSelector_MatchName{
+									MatchName: "foo",
+								},
+							},
+						},
+					},
+					Desired: &fnv1.State{
+						Composite: &fnv1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`),
+						},
+						Resources: map[string]*fnv1.Resource{
+							"cool-cd": {
+								Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`),
+							},
+						},
+					},
+				},
+			},
+		},
+		"DuplicateExtraResourcesKey": {
+			reason: "The Function should return a fatal result if the extra resource key is duplicated.",
+			args: args{
+				req: &fnv1.RunFunctionRequest{
+					Input: resource.MustStructJSON(`{
+						"apiVersion": "krm.kcl.dev/v1alpha1",
+						"kind": "KCLInput",
+						"metadata": {
+							"name": "basic"
+						},
+						"spec": {
+							"source": "items = [\n{\n    apiVersion: \"meta.krm.kcl.dev/v1alpha1\"\n    kind: \"ExtraResources\"\n    requirements = {\n        \"cool-extra-resource\" = {\n            apiVersion: \"example.org/v1\"\n            kind: \"CoolExtraResource\"\n            matchName: \"cool-extra-resource\"\n        }\n    }\n},\n{\n    apiVersion: \"meta.krm.kcl.dev/v1alpha1\"\n    kind: \"ExtraResources\"\n    requirements = {\n        \"cool-extra-resource\" = {\n            apiVersion: \"example.org/v1\"\n            kind: \"CoolExtraResource\"\n            matchLabels = {\n                key: \"value\"\n            }\n        },\n        \"yet-another-cool-extra-resource\" = {\n            apiVersion: \"example.org/v1\"\n            kind: \"CoolExtraResource\"\n            matchName: \"foo\"\n        }\n    }\n}\n]\n"
+						}
+					}`),
+					Observed: &fnv1.State{
+						Composite: &fnv1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`),
+						},
+					},
+					Desired: &fnv1.State{
+						Composite: &fnv1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`),
+						},
+						Resources: map[string]*fnv1.Resource{
+							"cool-cd": {
+								Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &fnv1.RunFunctionResponse{
+					Meta: &fnv1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*fnv1.Result{{
+						Severity: fnv1.Severity_SEVERITY_FATAL,
+						Message:  "cannot process xr and state with the pipeline output in *v1.RunFunctionResponse: duplicate extra resource key \"cool-extra-resource\"",
+						Target:   &targetComposite,
+					}},
+					Desired: &fnv1.State{
+						Composite: &fnv1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`),
+						},
+						Resources: map[string]*fnv1.Resource{
+							"cool-cd": {
+								Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`),
 							},
 						},
 					},

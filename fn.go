@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -76,6 +75,7 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1.RunFunctionRequest) 
 		response.Fatal(rsp, errors.Wrap(err, "cannot get desired composite resource"))
 		return rsp, nil
 	}
+
 	// Set option("params").dxr
 	dxr.Resource.SetAPIVersion(oxr.Resource.GetAPIVersion())
 	dxr.Resource.SetKind(oxr.Resource.GetKind())
@@ -161,7 +161,11 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1.RunFunctionRequest) 
 		})
 	}
 	log.Debug(fmt.Sprintf("Input resources: %v", resources))
-	result, err := pkgresource.ProcessResources(dxr, oxr, desired, observed, in.Spec.Target, resources, &pkgresource.AddResourcesOptions{
+
+	// Initialize the requirements.
+	requirements := &fnv1.Requirements{ExtraResources: make(map[string]*fnv1.ResourceSelector)}
+
+	result, err := pkgresource.ProcessResources(dxr, oxr, desired, observed, in.Spec.Target, resources, requirements, &pkgresource.AddResourcesOptions{
 		Basename:  in.Name,
 		Data:      data,
 		Overwrite: true,
@@ -184,6 +188,11 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1.RunFunctionRequest) 
 		response.Fatal(rsp, errors.Wrapf(err, "cannot set desired composed resources in %T", rsp))
 		return rsp, nil
 	}
+
+	if len(requirements.ExtraResources) > 0 {
+		rsp.Requirements = requirements
+	}
+
 	log.Info("Successfully processed crossplane KCL function resources", "input", in.Name)
 	return rsp, nil
 }

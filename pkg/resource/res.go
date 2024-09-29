@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	fnv1 "github.com/crossplane/function-sdk-go/proto/v1"
 	"sort"
 	"strings"
 
@@ -386,10 +387,11 @@ func SetData(data any, path string, o any, overwrite bool) error {
 	return nil
 }
 
-func ProcessResources(dxr *resource.Composite, oxr *resource.Composite, desired map[resource.Name]*resource.DesiredComposed, observed map[resource.Name]resource.ObservedComposed, target Target, resources ResourceList, opts *AddResourcesOptions) (AddResourcesResult, error) {
+func ProcessResources(dxr *resource.Composite, oxr *resource.Composite, desired map[resource.Name]*resource.DesiredComposed, observed map[resource.Name]resource.ObservedComposed, target Target, resources ResourceList, requirements *fnv1.Requirements, opts *AddResourcesOptions) (AddResourcesResult, error) {
 	result := AddResourcesResult{
 		Target: target,
 	}
+	// Initialize the requirements.
 	data := opts.Data
 	switch target {
 	case XR:
@@ -465,8 +467,20 @@ func ProcessResources(dxr *resource.Composite, oxr *resource.Composite, desired 
 						d, _ := base64.StdEncoding.DecodeString(v) //nolint:errcheck // k8s returns secret values encoded
 						dxr.ConnectionDetails[k] = d
 					}
+				case "ExtraResources":
+					// Set extra resources requirements.
+					ers := make(ExtraResourcesRequirements)
+					if err := cd.Resource.GetValueInto("requirements", &ers); err != nil {
+						return result, errors.Wrap(err, fmt.Sprintf("cannot get extra resource requirements"))
+					}
+					for k, v := range ers {
+						if _, found := requirements.ExtraResources[k]; found {
+							return result, errors.Errorf("duplicate extra resource key %q", k)
+						}
+						requirements.ExtraResources[k] = v.ToResourceSelector()
+					}
 				default:
-					return result, errors.Errorf("invalid kind %q for apiVersion %q - must be CompositeConnectionDetails", obj.GetKind(), MetaApiVersion)
+					return result, errors.Errorf("invalid kind %q for apiVersion %q - must be CompositeConnectionDetails or ExtraResources", obj.GetKind(), MetaApiVersion)
 				}
 				continue
 			}
@@ -483,6 +497,7 @@ func ProcessResources(dxr *resource.Composite, oxr *resource.Composite, desired 
 				return result, err
 			}
 		}
+
 		result.Object = data
 		result.MsgCount = len(data)
 		result.setSuccessMsgs()
