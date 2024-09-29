@@ -1,7 +1,7 @@
 package resource
 
 import (
-	fnv1beta1 "github.com/crossplane/function-sdk-go/proto/v1beta1"
+	fnv1 "github.com/crossplane/function-sdk-go/proto/v1"
 	"reflect"
 	"testing"
 )
@@ -10,7 +10,7 @@ func TestExtraResourcesRequirement_ToResourceSelector(t *testing.T) {
 	tests := []struct {
 		name   string
 		fields ExtraResourcesRequirement
-		want   *fnv1beta1.ResourceSelector
+		want   *fnv1.ResourceSelector
 	}{
 		{
 			name: "TestWithLabels",
@@ -20,13 +20,12 @@ func TestExtraResourcesRequirement_ToResourceSelector(t *testing.T) {
 				MatchLabels: map[string]string{
 					"app": "TestApp",
 				},
-				MatchName: "TestName",
 			},
-			want: &fnv1beta1.ResourceSelector{
+			want: &fnv1.ResourceSelector{
 				ApiVersion: "v1",
 				Kind:       "Namespace",
-				Match: &fnv1beta1.ResourceSelector_MatchLabels{
-					MatchLabels: &fnv1beta1.MatchLabels{
+				Match: &fnv1.ResourceSelector_MatchLabels{
+					MatchLabels: &fnv1.MatchLabels{
 						Labels: map[string]string{
 							"app": "TestApp",
 						},
@@ -41,10 +40,10 @@ func TestExtraResourcesRequirement_ToResourceSelector(t *testing.T) {
 				Kind:       "Namespace",
 				MatchName:  "TestName",
 			},
-			want: &fnv1beta1.ResourceSelector{
+			want: &fnv1.ResourceSelector{
 				ApiVersion: "v1",
 				Kind:       "Namespace",
-				Match: &fnv1beta1.ResourceSelector_MatchName{
+				Match: &fnv1.ResourceSelector_MatchName{
 					MatchName: "TestName",
 				},
 			},
