@@ -109,6 +109,19 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1.RunFunctionRequest) 
 		response.Fatal(rsp, err)
 		return rsp, nil
 	}
+	extra, err := request.GetExtraResources(req)
+	if err != nil {
+		response.Fatal(rsp, errors.Wrapf(err, "cannot get extra resources from %T", req))
+		return rsp, nil
+	}
+
+	log.Debug(fmt.Sprintf("ExtraResources resources: %d", len(extra)))
+	in.Spec.Params["er"], err = pkgresource.ObjToRawExtension(extra)
+	if err != nil {
+		response.Fatal(rsp, err)
+		return rsp, nil
+	}
+
 	// Set function context
 	ctxByte, err := req.Context.MarshalJSON()
 	if err != nil {
