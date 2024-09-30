@@ -16,3 +16,5 @@ vendor/
 .kclvm
 .DS_store
 package/*.xpkg
+
+.idea
