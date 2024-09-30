@@ -364,7 +364,7 @@ spec:
 ```
 
 ### Extra resources
-By defining one or more special ExtraResources, you can ask Crossplane to retrieve additional resources from the local cluster and make them available to your templates. See the [docs](https://github.com/crossplane/crossplane/blob/main/design/design-doc-composition-functions-extra-resources.md) for more information.
+By defining one or more special `ExtraResources`, you can ask Crossplane to retrieve additional resources from the local cluster and make them available to your templates. See the [docs](https://github.com/crossplane/crossplane/blob/main/design/design-doc-composition-functions-extra-resources.md) for more information.
 
 ```yaml
 apiVersion: krm.kcl.dev/v1alpha1
@@ -401,7 +401,7 @@ spec:
 ```
 You can retrieve the extra resources either via labels with `matchLabels` or via name with `matchName: somename`.
 
-This will result in crossplane receiving the requested resources and make it available with the following format.
+This will result in Crossplane receiving the requested resources and make them available with the following format.
 ```yaml
 foo:
 - Resource:
