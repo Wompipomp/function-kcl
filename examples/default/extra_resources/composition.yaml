@@ -1,0 +1,47 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: function-template-go
+spec:
+  compositeTypeRef:
+    apiVersion: example.crossplane.io/v1beta1
+    kind: XR
+  mode: Pipeline
+  pipeline:
+  - step: normal
+    functionRef:
+      name: kcl-function
+    input:
+      apiVersion: krm.kcl.dev/v1alpha1
+      kind: KCLInput
+      metadata:
+        annotations:
+          "krm.kcl.dev/default_ready": "True"
+        name: basic
+      spec:
+        source: |
+          oxr = option("params").oxr
+          extraResources = option("params")?.er
+          bucket = extraResources?.bucket[0]?.Resource if extraResources?.bucket else {}
+          externalName = bucket?.metadata.annotations["crossplane.io/external-name"] if bucket?.metadata?.annotations else ""
+       
+          dxr = {
+              **oxr
+              status.bucket = externalName
+          }
+          
+          details = {
+              apiVersion: "meta.krm.kcl.dev/v1alpha1"
+              kind: "ExtraResources"
+              requirements = {
+                bucket = {
+                  apiVersion: "s3.aws.upbound.io/v1beta1",
+                  kind: "Bucket",
+                  matchName: "my-awesome-dev-bucket"
+                }
+              }
+          }
+          items = [
+              details
+              dxr 
+          ]
